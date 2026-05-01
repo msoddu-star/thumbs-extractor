@@ -1,11 +1,10 @@
-
 const express = require('express');
 const puppeteer = require('puppeteer');
 
 const app = express();
 
 app.get('/', (req, res) => {
-  res.send('Server attivo 👍');
+  res.send('Server attivo');
 });
 
 app.get('/thumbs', async (req, res) => {
@@ -20,7 +19,6 @@ app.get('/thumbs', async (req, res) => {
   try {
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -47,12 +45,11 @@ app.get('/thumbs', async (req, res) => {
       try {
         if (window.jQuery) {
           const fotorama = window.jQuery('.fotorama').data('fotorama');
+
           if (fotorama && Array.isArray(fotorama.data)) {
-            fromFotorama = fotorama.data.flatMap(item => [
-              item.thumb,
-              item.img,
-              item.full
-            ]).filter(Boolean);
+            fromFotorama = fotorama.data
+              .flatMap(item => [item.thumb, item.img, item.full])
+              .filter(Boolean);
           }
         }
       } catch (e) {}
@@ -66,7 +63,11 @@ app.get('/thumbs', async (req, res) => {
       return res.send('No thumbnails found');
     }
 
-    let html = '<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">';
+    let html = `
+      <html>
+        <body>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+    `;
 
     unique.forEach(img => {
       html += `
@@ -76,7 +77,11 @@ app.get('/thumbs', async (req, res) => {
       `;
     });
 
-    html += '</div>';
+    html += `
+          </div>
+        </body>
+      </html>
+    `;
 
     res.send(html);
 
