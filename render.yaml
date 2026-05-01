@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: puppeteer-scraper
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: false
+      - key: NODE_ENV
+        value: production
