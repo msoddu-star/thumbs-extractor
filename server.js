@@ -2,100 +2,77 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.send('Server attivo');
+  res.json({ status: 'ok', message: 'Scraper attivo. Usa /scrape?url=...' });
 });
 
-app.get('/thumbs', async (req, res) => {
-  const url = req.query.url;
+app.get('/scrape', async (req, res) => {
+  const { url, selector } = req.query;
 
   if (!url) {
-    return res.send('Missing URL');
+    return res.status(400).json({ error: 'Parametro url mancante' });
   }
 
-  let browser;
+  const imgSelector = selector || '.fotorama__nav__frame img';
 
+  let browser;
   try {
     browser = await puppeteer.launch({
-      headless: true,
+      headless: 'new',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ]
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+      ],
     });
 
     const page = await browser.newPage();
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
 
-    await page.goto(url, {
-      waitUntil: 'networkidle2',
-      timeout: 60000
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+
+    // Aspetta che le thumbnail siano caricate
+    await page.waitForSelector(imgSelector, { timeout: 15000 }).catch(() => {
+      console.log('Selector non trovato, procedo comunque...');
     });
 
-    await new Promise(resolve => setTimeout(resolve, 8000));
+    // Piccola pausa extra per JS asincrono
+    await new Promise(r => setTimeout(r, 2000));
 
-    const images = await page.evaluate(() => {
-      const fromImgs = Array.from(document.querySelectorAll('.fotorama__img'))
-        .map(img => img.src)
-        .filter(Boolean);
+    const images = await page.$$eval(imgSelector, els =>
+      els
+        .map(el => el.src || el.dataset.src || el.getAttribute('data-img-src'))
+        .filter(src => src && src.startsWith('http'))
+    );
 
-      let fromFotorama = [];
-
-      try {
-        if (window.jQuery) {
-          const fotorama = window.jQuery('.fotorama').data('fotorama');
-
-          if (fotorama && Array.isArray(fotorama.data)) {
-            fromFotorama = fotorama.data
-              .flatMap(item => [item.thumb, item.img, item.full])
-              .filter(Boolean);
-          }
-        }
-      } catch (e) {}
-
-      return [...fromImgs, ...fromFotorama];
-    });
-
+    // Deduplicazione
     const unique = [...new Set(images)];
 
-    if (unique.length === 0) {
-      return res.send('No thumbnails found');
-    }
-
-    let html = `
-      <html>
-        <body>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-    `;
-
-    unique.forEach(img => {
-      html += `
-        <a href="${img}" target="_blank" rel="noopener noreferrer">
-          <img src="${img}" width="30" height="30" style="object-fit:cover;border:1px solid #ccc;" />
-        </a>
-      `;
+    res.json({
+      url,
+      selector: imgSelector,
+      count: unique.length,
+      images: unique,
     });
 
-    html += `
-          </div>
-        </body>
-      </html>
-    `;
-
-    res.send(html);
-
   } catch (err) {
-    res.send('Errore: ' + err.message);
+    console.error(err);
+    res.status(500).json({ error: err.message });
   } finally {
-    if (browser) {
-      await browser.close();
-    }
+    if (browser) await browser.close();
   }
 });
 
-const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log('Server running on port ' + PORT);
+  console.log(`Server avviato su porta ${PORT}`);
 });
