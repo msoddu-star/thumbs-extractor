@@ -1,0 +1,13 @@
+{
+  "name": "thumbs-extractor",
+  "version": "1.0.0",
+  "description": "Extract thumbnails from product pages",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "puppeteer": "^21.6.0"
+  }
+}
