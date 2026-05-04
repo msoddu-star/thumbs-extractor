@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// CORS - permette chiamate da qualsiasi origine (incluso claude.ai)
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -50,21 +50,25 @@ app.get('/scrape', async (req, res) => {
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Aspetta che le thumbnail siano caricate
     await page.waitForSelector(imgSelector, { timeout: 15000 }).catch(() => {
       console.log('Selector non trovato, procedo comunque...');
     });
 
-    // Piccola pausa extra per JS asincrono
     await new Promise(r => setTimeout(r, 2000));
 
     const images = await page.$$eval(imgSelector, els =>
-      els
-        .map(el => el.src || el.dataset.src || el.getAttribute('data-img-src'))
-        .filter(src => src && src.startsWith('http'))
+      els.map(el => {
+        // Prova attributi full size
+        const full = el.getAttribute('data-full') ||
+                     el.getAttribute('data-zoom-image') ||
+                     el.getAttribute('data-large') ||
+                     el.getAttribute('data-src') ||
+                     el.src;
+        // Rimuove /cache/HASH/ per ottenere l'originale
+        return full ? full.replace(/\/cache\/[a-f0-9]+\//, '/') : null;
+      }).filter(src => src && src.startsWith('http'))
     );
 
-    // Deduplicazione
     const unique = [...new Set(images)];
 
     res.json({
