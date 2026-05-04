@@ -1,12 +1,9 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-
-// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -20,78 +17,112 @@ app.get('/', (req, res) => {
 });
 
 app.get('/scrape', async (req, res) => {
-  const { url, selector } = req.query;
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'Parametro url mancante' });
 
-  if (!url) {
-    return res.status(400).json({ error: 'Parametro url mancante' });
+  try { new URL(url); } catch {
+    return res.status(400).json({ error: 'URL non valido' });
   }
-
-const imgSelector = selector || '.fotorama__stage img, .fotorama__nav__frame img';
 
   let browser;
   try {
     browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-      ],
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+             '--disable-gpu', '--no-first-run', '--no-zygote', '--single-process'],
     });
 
     const page = await browser.newPage();
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
-
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-
-    await page.waitForSelector(imgSelector, { timeout: 15000 }).catch(() => {
-      console.log('Selector non trovato, procedo comunque...');
-    });
-
     await new Promise(r => setTimeout(r, 2000));
 
-    const images = await page.$$eval(imgSelector, els =>
-      els.map(el => {
-        // Prova attributi full size
-        const full = el.getAttribute('data-full') ||
-                     el.getAttribute('data-zoom-image') ||
-                     el.getAttribute('data-large') ||
-                     el.getAttribute('data-src') ||
-                     el.src;
-        // Rimuove /cache/HASH/ per ottenere l'originale
-        return full
-          ? full
-              .replace(/\/cache\/[^/]+\//, '/')
-              .replace(/\/small_image\//, '/')
-              .replace(/\/thumbnail\//, '/')
-              .replace(/\/swatch_image\//, '/')
-          : null;
-      }).filter(src => src && src.startsWith('http'))
+    const result = await page.evaluate(() => {
+      const found = { method: null, rawPaths: [], baseUrl: null };
+
+      // --- Metodo 1: script type="text/x-magento-init" ---
+      const scripts = Array.from(document.querySelectorAll('script[type="text/x-magento-init"]'));
+      for (const script of scripts) {
+        try {
+          const json = JSON.parse(script.textContent);
+          for (const selector of Object.keys(json)) {
+            const node = json[selector];
+
+            // mage/gallery/gallery contiene .data[] con .full, .img, .thumb
+            if (node['mage/gallery/gallery']) {
+              const items = node['mage/gallery/gallery'].data;
+              if (Array.isArray(items) && items.length) {
+                found.method = 'mage/gallery/gallery';
+                found.rawPaths = items.map(i => i.full || i.img || i.thumb).filter(Boolean);
+                return found;
+              }
+            }
+
+            // Magento_Catalog provider
+            if (node['Magento_Catalog/js/product/view/provider']) {
+              const items = node['Magento_Catalog/js/product/view/provider'].data?.items;
+              if (items) {
+                found.method = 'Magento_Catalog/provider';
+                found.rawPaths = Object.values(items)
+                  .flatMap(item => (item.media_gallery_entries || []).map(e => e.file))
+                  .filter(Boolean);
+                if (found.rawPaths.length) return found;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // --- Metodo 2: data-mage-init sul gallery container ---
+      const gallery = document.querySelector('[data-gallery-role="gallery-placeholder"]');
+      if (gallery) {
+        try {
+          const init = JSON.parse(gallery.getAttribute('data-mage-init') || '{}');
+          const items = init['mage/gallery/gallery']?.data || [];
+          if (items.length) {
+            found.method = 'data-mage-init';
+            found.rawPaths = items.map(i => i.full || i.img || i.thumb).filter(Boolean);
+            return found;
+          }
+        } catch {}
+      }
+
+      // --- Metodo 3: fallback DOM fotorama (thumbnail, meno preciso) ---
+      const imgSelector = '.fotorama__stage img, .fotorama__nav__frame img';
+      const els = Array.from(document.querySelectorAll(imgSelector));
+      found.method = 'fallback-dom';
+      found.rawPaths = els
+        .map(el => el.getAttribute('data-full') || el.getAttribute('data-zoom-image') ||
+                   el.getAttribute('data-large') || el.getAttribute('data-src') || el.src)
+        .filter(src => src && src.startsWith('http'));
+      return found;
+    });
+
+    // Se i path sono relativi (es. /media/catalog/...), costruisci l'URL assoluto
+    const origin = new URL(url).origin;
+    const images = result.rawPaths.map(p =>
+      p.startsWith('http') ? p : `${origin}${p.startsWith('/') ? '' : '/'}${p}`
     );
 
-    const unique = [...new Set(images)];
+    // Rimuovi cache path Magento se ancora presenti
+    const cleaned = images.map(src =>
+      src.replace(/\/cache\/[^/]+\//, '/')
+         .replace(/\/small_image\/\d+x\d+\/[^/]+\//, '/')
+         .replace(/\/thumbnail\/\d+x\d+\/[^/]+\//, '/')
+    );
 
-    res.json({
-      url,
-      selector: imgSelector,
-      count: unique.length,
-      images: unique,
-    });
+    const unique = [...new Set(cleaned)];
+    res.json({ url, method: result.method, count: unique.length, images: unique });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    const status = err.message.includes('timeout') ? 504 : 500;
+    res.status(status).json({ error: err.message });
   } finally {
     if (browser) await browser.close();
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server avviato su porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server avviato su porta ${PORT}`));
