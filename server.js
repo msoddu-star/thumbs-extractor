@@ -26,7 +26,7 @@ app.get('/scrape', async (req, res) => {
     return res.status(400).json({ error: 'Parametro url mancante' });
   }
 
-  const imgSelector = selector || '.fotorama__nav__frame img';
+const imgSelector = selector || '.fotorama__stage img, .fotorama__nav__frame img';
 
   let browser;
   try {
@@ -65,7 +65,13 @@ app.get('/scrape', async (req, res) => {
                      el.getAttribute('data-src') ||
                      el.src;
         // Rimuove /cache/HASH/ per ottenere l'originale
-        return full ? full.replace(/\/cache\/[a-f0-9]+\//, '/') : null;
+        return full
+          ? full
+              .replace(/\/cache\/[^/]+\//, '/')
+              .replace(/\/small_image\//, '/')
+              .replace(/\/thumbnail\//, '/')
+              .replace(/\/swatch_image\//, '/')
+          : null;
       }).filter(src => src && src.startsWith('http'))
     );
 
