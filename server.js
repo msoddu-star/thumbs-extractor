@@ -125,14 +125,23 @@ app.get('/scrape', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Server avviato su porta ${PORT}`));app.use(express.static('public'));
 
+
+// middleware
+app.use(express.json());
+app.use(express.static('public'));
+
+// route app.html
 app.get('/app', (req, res) => {
   res.sendFile(__dirname + '/public/app.html');
 });
 
-// Existing middleware and other routes below this line
-
+// homepage (opzionale)
 app.get('/', function(req, res) {
-    res.send('Main Page');
+  res.send('Main Page');
+});
+
+// AVVIO SERVER (SEMPRE ALLA FINE)
+app.listen(PORT, () => {
+  console.log(`Server avviato su porta ${PORT}`);
 });
