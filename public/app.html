@@ -1,11 +1,172 @@
 <!DOCTYPE html>
-<html lang="en">
+
+<html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App</title>
+<meta charset="UTF-8">
+<title>Lemani Casa – DEM Living</title>
+
+<style>
+body {
+  font-family: Arial;
+  background:#f5f3ef;
+  margin:0;
+  padding:30px;
+}
+
+.container {
+  max-width:1100px;
+  margin:auto;
+  background:white;
+  padding:30px;
+  border-radius:16px;
+}
+
+h1 { margin-top:0; }
+
+.hero {
+  background:#2d2926;
+  color:white;
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
+}
+
+button {
+  background:#2d2926;
+  color:white;
+  border:none;
+  padding:8px 12px;
+  border-radius:20px;
+  cursor:pointer;
+}
+
+table {
+  width:100%;
+  border-collapse:collapse;
+}
+
+td, th {
+  padding:10px;
+  border-bottom:1px solid #ddd;
+}
+
+.thumb {
+  width:70px;
+  height:70px;
+  object-fit:contain;
+  margin:5px;
+  border:1px solid #ddd;
+  border-radius:8px;
+}
+
+.images {
+  margin-top:10px;
+}
+</style>
+
 </head>
 <body>
-    <h1>Hello, World!</h1>
+
+<div class="container">
+
+<h1>NL-20260430-Living</h1>
+
+<div class="hero">
+<h2>Rinnova il tuo Living con stile</h2>
+<p>Scopri la selezione Lemani Casa per il tuo soggiorno.</p>
+</div>
+
+<p>
+Ciao,<br><br>
+crea l’atmosfera perfetta nel tuo Living con una selezione di arredi di design.
+</p>
+
+<h2>Prodotti selezionati</h2>
+
+<table>
+
+<tr>
+<th>Prodotto</th>
+<th>Brand</th>
+<th>Azioni</th>
+</tr>
+
+<!-- PRODOTTO 1 -->
+
+<tr>
+<td>Madia Secret</td>
+<td>Calligaris</td>
+<td><button onclick="estrai(0)">Estrai immagini</button></td>
+</tr>
+<tr>
+<td colspan="3"><div id="img0" class="images"></div></td>
+</tr>
+
+<!-- PRODOTTO 2 -->
+
+<tr>
+<td>Madia Gubia</td>
+<td>Alf DaFrè</td>
+<td><button onclick="estrai(1)">Estrai immagini</button></td>
+</tr>
+<tr>
+<td colspan="3"><div id="img1" class="images"></div></td>
+</tr>
+
+<!-- PRODOTTO 3 -->
+
+<tr>
+<td>Madia Nemesi</td>
+<td>Ronda Design</td>
+<td><button onclick="estrai(2)">Estrai immagini</button></td>
+</tr>
+<tr>
+<td colspan="3"><div id="img2" class="images"></div></td>
+</tr>
+
+</table>
+
+</div>
+
+<script>
+
+const prodotti = [
+"https://store.lemanicasa.com/it/arredamento/outlet-calligaris-madia-secret.html",
+"https://store.lemanicasa.com/it/arredamento/alf-dafre-madia-gubia.html",
+"https://store.lemanicasa.com/it/arredamento/rondadesign-madia-nemesi.html"
+];
+
+async function estrai(index) {
+
+  const box = document.getElementById("img"+index);
+  box.innerHTML = "Caricamento...";
+
+  try {
+    const res = await fetch("/scrape?url=" + encodeURIComponent(prodotti[index]));
+    const data = await res.json();
+
+    box.innerHTML = "";
+
+    data.images.forEach(img => {
+      const a = document.createElement("a");
+      a.href = img;
+      a.target = "_blank";
+
+      const image = document.createElement("img");
+      image.src = img;
+      image.className = "thumb";
+
+      a.appendChild(image);
+      box.appendChild(a);
+    });
+
+  } catch(e) {
+    box.innerHTML = "Errore caricamento immagini";
+  }
+
+}
+
+</script>
+
 </body>
 </html>
