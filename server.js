@@ -161,4 +161,4 @@ app.get('/image', (req, res) => {
 
   fetchImage(url);
 });
-app.listen(PORT, () => console.log(`Server avviato su porta ${PORT}`));
+app.listen(PORT, () => console.log(`Server avviato su porta ${PORT}`)); 
