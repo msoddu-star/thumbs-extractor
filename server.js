@@ -36,7 +36,7 @@ app.get('/scrape', async (req, res) => {
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await new Promise(r => setTimeout(r, 2000));
 
     const result = await page.evaluate(() => {
@@ -113,8 +113,20 @@ app.get('/scrape', async (req, res) => {
          .replace(/\/thumbnail\/\d+x\d+\/[^/]+\//, '/')
     );
 
-    const unique = [...new Set(cleaned)];
-    res.json({ url, method: result.method, count: unique.length, images: unique });
+const unique = [...new Set(cleaned)];
+
+// proxy automatico immagini
+const proxied = unique.map(img =>
+  `https://image-proxy-1-9zk6.onrender.com/image?url=${encodeURIComponent(img)}`
+);
+
+res.json({
+  url,
+  method: result.method,
+  count: proxied.length,
+  images: proxied,
+  originalImages: unique
+});
 
   } catch (err) {
     console.error(err);
