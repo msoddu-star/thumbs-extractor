@@ -127,31 +127,38 @@ app.get('/scrape', async (req, res) => {
 const https = require('https');
 const http = require('http');
 
-app.get('/image', async (req, res) => {
+app.get('/image', (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Parametro url mancante' });
 
-  try {
-    new URL(url);
-  } catch {
+  try { new URL(url); } catch {
     return res.status(400).json({ error: 'URL non valido' });
   }
 
-  const client = url.startsWith('https') ? https : http;
-  const request = client.get(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': 'https://store.lemanicasa.com/',
-    }
-  }, (response) => {
-    const contentType = response.headers['content-type'] || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    response.pipe(res);
-  });
+  const fetchImage = (targetUrl, redirectCount = 0) => {
+    if (redirectCount > 5) return res.status(500).json({ error: 'Troppi redirect' });
+    const client = targetUrl.startsWith('https') ? https : http;
+    client.get(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://store.lemanicasa.com/',
+      }
+    }, (response) => {
+      if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+        const location = response.headers.location;
+        if (!location) return res.status(500).json({ error: 'Redirect senza location' });
+        const nextUrl = location.startsWith('http') ? location : new URL(location, targetUrl).href;
+        return fetchImage(nextUrl, redirectCount + 1);
+      }
+      const contentType = response.headers['content-type'] || 'image/jpeg';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      response.pipe(res);
+    }).on('error', (err) => {
+      res.status(500).json({ error: err.message });
+    });
+  };
 
-  request.on('error', (err) => {
-    res.status(500).json({ error: err.message });
-  });
+  fetchImage(url);
 });
 app.listen(PORT, () => console.log(`Server avviato su porta ${PORT}`));
